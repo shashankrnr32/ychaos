@@ -200,13 +200,14 @@ class MachineTargetExecutor(BaseExecutor):
             tasks=[
                 dict(
                     name="Check current working directory",
-                    action=dict(module="command", args=dict(cmd="pwd")),
+                    local_action=dict(module="command", args=dict(cmd="pwd")),
                     register="result_pwd",
                     changed_when="false",
                 ),
+                # Not required I guess
                 dict(
                     name="Check if python3 installed",
-                    action=dict(module="command", args=dict(cmd="which python3")),
+                    local_action=dict(module="command", args=dict(cmd="which python3")),
                     register="result_which_python3",
                     changed_when="false",
                     failed_when=[
@@ -217,7 +218,7 @@ class MachineTargetExecutor(BaseExecutor):
                 dict(
                     name="Create a virtual environment",
                     register="result_pip",
-                    action=dict(
+                    local_action=dict(
                         module="pip",
                         chdir="{{result_pwd.stdout}}",
                         name="pip",
@@ -235,10 +236,11 @@ class MachineTargetExecutor(BaseExecutor):
                         ansible_python_interpreter="{{result_which_python3.stdout}}"
                     ),
                 ),
+                # Introduce Debug mode for this change
                 dict(
                     name="Install ychaos[agents]",
                     register="result_pip_install_ychaos_agents",
-                    action=dict(
+                    local_action=dict(
                         module="pip",
                         chdir="{{result_pwd.stdout}}",
                         name="ychaos[agents]",
@@ -255,7 +257,7 @@ class MachineTargetExecutor(BaseExecutor):
                 dict(
                     name="Create a workspace directory for storing local report files",
                     register="result_create_workspace",
-                    action=dict(
+                    local_action=dict(
                         module="file",
                         path="{{result_pwd.stdout}}/ychaos_ws",
                         state="directory",
@@ -265,7 +267,7 @@ class MachineTargetExecutor(BaseExecutor):
                 dict(
                     name="Copy testplan from local to remote",
                     register="result_testplan_file",
-                    action=dict(
+                    local_action=dict(
                         module="copy",
                         content=json.dumps(
                             self.testplan.to_serialized_dict(), indent=4
@@ -276,7 +278,7 @@ class MachineTargetExecutor(BaseExecutor):
                 dict(
                     name="Run YChaos Agent",
                     ignore_errors="yes",
-                    action=dict(
+                    local_action=dict(
                         module="shell",
                         cmd=" ".join(
                             [
@@ -286,42 +288,6 @@ class MachineTargetExecutor(BaseExecutor):
                                 "agent attack --testplan {{result_testplan_file.dest}} --attack-report-yaml {{result_create_workspace.path}}/attack_report.yaml",
                             ]
                         ),
-                    ),
-                ),
-                dict(
-                    name="Zip workspace directory",
-                    action=dict(
-                        module="community.general.archive",
-                        path="{{result_create_workspace.path}}",
-                        dest="{{result_create_workspace.path}}/ychaos.zip",
-                        format="zip",
-                    ),
-                ),
-                dict(
-                    name="Copy Workspace directory to local",
-                    action=dict(
-                        module="fetch",
-                        src="{{result_create_workspace.path}}/ychaos.zip",
-                        dest=str(
-                            self.testplan.attack.get_target_config().report_dir.resolve()
-                        )
-                        + "/ychaos_{{inventory_hostname}}.zip",
-                    ),
-                ),
-                dict(
-                    name="Delete YChaos Workspace on host",
-                    action=dict(
-                        module="file",
-                        path="{{result_create_workspace.path}}",
-                        state="absent",
-                    ),
-                ),
-                dict(
-                    name="Delete Virtual environment",
-                    action=dict(
-                        module="file",
-                        path="{{result_pip.virtualenv}}",
-                        state="absent",
                     ),
                 ),
             ],
